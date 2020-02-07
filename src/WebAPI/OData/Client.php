@@ -296,6 +296,27 @@ class Client {
     /**
      * @param $uri
      * @param null $queryOptions
+     * @throws AuthenticationException
+     * @throws ODataException
+     * @throws TransportException
+     * @return \Generator
+     */
+    public function generateList($uri, $queryOptions = null)
+    {
+        $url = $this->buildQueryURL($uri, $queryOptions);
+        while ($url !== null) {
+            $res = $this->doRequest('GET', $url, null, $this->buildQueryHeaders($queryOptions));
+            $data = json_decode($res->getBody());
+            $url = $data->{Annotation::ODATA_NEXTLINK} ?? null;
+            foreach ($data->value as $idx => $item) {
+                yield $item;
+            }
+        }
+    }
+
+    /**
+     * @param $uri
+     * @param null $queryOptions
      *
      * @return ListResponse
      * @throws AuthenticationException

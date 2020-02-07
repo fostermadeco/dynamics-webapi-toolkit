@@ -277,6 +277,17 @@ class Client implements IOrganizationService {
     }
 
     /**
+     * @param QueryByAttribute $query
+     * @throws OrganizationException
+     * @throws ToolkitException
+     * @return \Generator
+     */
+    public function generateMultiple(QueryByAttribute $query)
+    {
+        yield from $this->generateViaQueryByAttribute($query);
+    }
+
+    /**
      * @param FetchExpression $query
      *
      * @return EntityCollection
@@ -364,90 +375,8 @@ class Client implements IOrganizationService {
         try {
             $metadata = $this->client->getMetadata();
             $entityMap = $metadata->getEntityMap( $query->EntityName );
-            $inboundMap = $entityMap->inboundMap;
-            $columnMap = array_flip( $inboundMap );
 
-            $queryData = [];
-            $filterQuery = [];
-            foreach ( $query->Attributes as $attributeName => $value ) {
-                $queryAttributeName = $columnMap[ $attributeName ];
-
-                $attributeType = '';
-                if ( array_key_exists( $attributeName, $entityMap->fieldTypes ) ) {
-                    $attributeType = $entityMap->fieldTypes[ $attributeName ];
-                }
-
-                switch ( true ) {
-                    /*
-                     * GUIDs may be stored as strings,
-                     * but GUIDs in UniqueIdentifier attributes must not be enclosed in quotes.
-                     */
-                    case ( is_string( $value ) && $attributeType !== 'Edm.Guid' ):
-                        $queryValue = "'{$value}'";
-                        break;
-                    case is_bool( $value ):
-                        $queryValue = $value? 'true' : 'false';
-                        break;
-                    case $value === null:
-                        $queryValue = 'null';
-                        break;
-                    default:
-                        $queryValue = $value;
-                }
-
-                $filterQuery[] = $queryAttributeName . ' eq ' . $queryValue;
-            }
-            if ( count( $filterQuery ) ) {
-                $queryData['Filter'] = implode( ' and ', $filterQuery );
-            }
-
-            if ( $query->ColumnSet instanceof ColumnSet && !$query->ColumnSet->AllColumns ) {
-                foreach ( $query->ColumnSet->Columns as $column ) {
-                    if ( !array_key_exists( $column, $columnMap ) ) {
-                        $this->getLogger()->warning( "No inbound attribute mapping found for {$query->EntityName}[{$column}]" );
-                        continue;
-                    }
-
-                    $queryData['Select'][] = $columnMap[ $column ];
-                }
-            }
-
-            $orderMap = [
-                0 => 'asc',
-                1 => 'desc',
-            ];
-            foreach ( $query->Orders as $attributeName => $orderType ) {
-                if ( !array_key_exists( $attributeName, $columnMap ) ) {
-                    $this->getLogger()->warning( "No inbound attribute mapping found for {$query->EntityName}[{$attributeName}] order setting" );
-                    continue;
-                }
-
-                $queryData['OrderBy'][] = $columnMap[ $attributeName ] . ' ' . $orderMap[ $orderType->getValue() ];
-            }
-
-            if ( $query->TopCount > 0 && $query->PageInfo instanceof PagingInfo ) {
-                throw new \InvalidArgumentException( 'QueryByAttribute cannot have both TopCount and PageInfo properties set' );
-            }
-
-            if ( $query->TopCount > 0 ) {
-                $queryData['Top'] = $query->TopCount;
-            }
-
-            if ( $query->PageInfo instanceof PagingInfo ) {
-                if ( $query->PageInfo->Count > 0 ) {
-                    $queryData['MaxPageSize'] = $query->PageInfo->Count;
-                }
-
-                if ( isset( $query->PageInfo->PagingCookie ) ) {
-                    $queryData['SkipToken'] = $query->PageInfo->PagingCookie;
-                }
-
-                if ( $query->PageInfo->ReturnTotalRecordCount ) {
-                    $queryData['IncludeCount'] = true;
-                }
-            }
-
-            $collectionName = $metadata->getEntitySetName( $query->EntityName );
+            list($collectionName, $queryData) = $this->marshalQueryData($query, $entityMap);
             $response = $this->client->getList( $collectionName, $queryData );
 
             $collection = new EntityCollection();
@@ -465,21 +394,27 @@ class Client implements IOrganizationService {
                 $collection->MoreRecords = true;
             }
 
-            $serializer = new SerializationHelper( $this->client );
-
             foreach ( $response->List as $item ) {
-                $ref = new EntityReference( $query->EntityName );
-                $recordKey = $entityMap->key;
-                if ( property_exists( $item, $recordKey ) ) {
-                    $ref->Id = $item->{$recordKey};
-                }
-
-                $record = $serializer->deserializeEntity( $item, $ref );
-
-                $collection->Entities[] = $record;
+                $collection->Entities[] = $this->createRecord($item);
             }
 
             return $collection;
+        } catch ( ODataException $e ) {
+            throw new OrganizationException( 'RetrieveMultiple (QueryByAttribute) request failed: ' . $e->getMessage(), $e );
+        } catch ( TransportException $e ) {
+            throw new ToolkitException( $e->getMessage(), $e );
+        } catch ( EntityNotSupportedException $e ) {
+            throw new ToolkitException( "Cannot retrieve via QueryByAttribute: entity `{$query->EntityName}` is not supported", $e );
+        }
+    }
+
+    protected function generateViaQueryByAttribute(QueryByAttribute $query)
+    {
+        try {
+            list($collectionName, $queryData, $key) = $this->marshalQueryData($query);
+            foreach ($this->client->generateList($collectionName, $queryData) as $item) {
+                yield $this->createRecord($item, $query->EntityName, $key);
+            }
         } catch ( ODataException $e ) {
             throw new OrganizationException( 'RetrieveMultiple (QueryByAttribute) request failed: ' . $e->getMessage(), $e );
         } catch ( TransportException $e ) {
@@ -534,4 +469,105 @@ class Client implements IOrganizationService {
         return $this->client->getCachePool();
     }
 
+    protected function marshalQueryData($query)
+    {
+        $metadata = $this->client->getMetadata();
+        $entityMap = $metadata->getEntityMap( $query->EntityName );
+        $inboundMap = $entityMap->inboundMap;
+        $columnMap = array_flip( $inboundMap );
+
+        $queryData = [];
+        $filterQuery = [];
+        foreach ( $query->Attributes as $attributeName => $value ) {
+            $queryAttributeName = $columnMap[ $attributeName ];
+
+            $attributeType = '';
+            if ( array_key_exists( $attributeName, $entityMap->fieldTypes ) ) {
+                $attributeType = $entityMap->fieldTypes[ $attributeName ];
+            }
+
+            switch ( true ) {
+                /*
+                 * GUIDs may be stored as strings,
+                 * but GUIDs in UniqueIdentifier attributes must not be enclosed in quotes.
+                 */
+                case ( is_string( $value ) && $attributeType !== 'Edm.Guid' ):
+                    $queryValue = "'{$value}'";
+                    break;
+                case is_bool( $value ):
+                    $queryValue = $value? 'true' : 'false';
+                    break;
+                case $value === null:
+                    $queryValue = 'null';
+                    break;
+                default:
+                    $queryValue = $value;
+            }
+
+            $filterQuery[] = $queryAttributeName . ' eq ' . $queryValue;
+        }
+        if ( count( $filterQuery ) ) {
+            $queryData['Filter'] = implode( ' and ', $filterQuery );
+        }
+
+        if ( $query->ColumnSet instanceof ColumnSet && !$query->ColumnSet->AllColumns ) {
+            foreach ( $query->ColumnSet->Columns as $column ) {
+                if ( !array_key_exists( $column, $columnMap ) ) {
+                    $this->getLogger()->warning( "No inbound attribute mapping found for {$query->EntityName}[{$column}]" );
+                    continue;
+                }
+
+                $queryData['Select'][] = $columnMap[ $column ];
+            }
+        }
+
+        $orderMap = [
+            0 => 'asc',
+            1 => 'desc',
+        ];
+        foreach ( $query->Orders as $attributeName => $orderType ) {
+            if ( !array_key_exists( $attributeName, $columnMap ) ) {
+                $this->getLogger()->warning( "No inbound attribute mapping found for {$query->EntityName}[{$attributeName}] order setting" );
+                continue;
+            }
+
+            $queryData['OrderBy'][] = $columnMap[ $attributeName ] . ' ' . $orderMap[ $orderType->getValue() ];
+        }
+
+        if ( $query->TopCount > 0 && $query->PageInfo instanceof PagingInfo ) {
+            throw new \InvalidArgumentException( 'QueryByAttribute cannot have both TopCount and PageInfo properties set' );
+        }
+
+        if ( $query->TopCount > 0 ) {
+            $queryData['Top'] = $query->TopCount;
+        }
+
+        if ( $query->PageInfo instanceof PagingInfo ) {
+            if ( $query->PageInfo->Count > 0 ) {
+                $queryData['MaxPageSize'] = $query->PageInfo->Count;
+            }
+
+            if ( isset( $query->PageInfo->PagingCookie ) ) {
+                $queryData['SkipToken'] = $query->PageInfo->PagingCookie;
+            }
+
+            if ( $query->PageInfo->ReturnTotalRecordCount ) {
+                $queryData['IncludeCount'] = true;
+            }
+        }
+
+        return [$metadata->getEntitySetName($query->EntityName), $queryData, $entityMap->key];
+    }
+
+    protected function createRecord($item, $entityName, $recordKey)
+    {
+        $serializer = new SerializationHelper( $this->client );
+
+        $ref = new EntityReference( $entityName );
+        if ( property_exists( $item, $recordKey ) ) {
+            $ref->Id = $item->{$recordKey};
+        }
+
+        return $serializer->deserializeEntity( $item, $ref );
+    }
 }
