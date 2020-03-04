@@ -486,6 +486,11 @@ class Client implements IOrganizationService {
                 $attributeType = $entityMap->fieldTypes[ $attributeName ];
             }
 
+            if (is_array($value)) {
+                $operator = key($value);
+                $value = current($value);
+            }
+
             switch ( true ) {
                 /*
                  * GUIDs may be stored as strings,
@@ -504,7 +509,7 @@ class Client implements IOrganizationService {
                     $queryValue = $value;
             }
 
-            $filterQuery[] = $queryAttributeName . ' eq ' . $queryValue;
+            $filterQuery[] = implode(' ', [$queryAttributeName, ($operator ?? 'eq'), $queryValue]);
         }
         if ( count( $filterQuery ) ) {
             $queryData['Filter'] = implode( ' and ', $filterQuery );
