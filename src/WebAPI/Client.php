@@ -486,6 +486,8 @@ class Client implements IOrganizationService {
                 $attributeType = $entityMap->fieldTypes[ $attributeName ];
             }
 
+            $operator = 'eq';
+
             if (is_array($value)) {
                 $operator = key($value);
                 $value = current($value);
@@ -509,7 +511,11 @@ class Client implements IOrganizationService {
                     $queryValue = $value;
             }
 
-            $filterQuery[] = implode(' ', [$queryAttributeName, ($operator ?? 'eq'), $queryValue]);
+            if (in_array($operator, ['contains', 'endswith', 'startswith'])) {
+                $filterQuery[] = sprintf("%s(%s, '%s')", $operator, $attributeName, $value);
+            } else {
+                $filterQuery[] = implode(' ', [$queryAttributeName, ($operator ?? 'eq'), $queryValue]);
+            }
         }
         if ( count( $filterQuery ) ) {
             $queryData['Filter'] = implode( ' and ', $filterQuery );
