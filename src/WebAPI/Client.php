@@ -567,6 +567,22 @@ class Client implements IOrganizationService {
             }
         }
 
+        if ($query->Expand ?? false) {
+            if (is_string($query->Expand)) {
+                $queryData['Expand'] = $query->Expand;
+            } else {
+                $expanded = [];
+                foreach ($query->Expand as $related => $fields) {
+                    if (is_int($related)) {
+                        $expanded[] = $fields;
+                    } else {
+                        $expanded[] = sprintf('%s($select=%s)', $related, join(',', $fields));
+                    }
+                }
+                $queryData['Expand'] = join(',', $expanded);
+            }
+        }
+
         return [$metadata->getEntitySetName($query->EntityName), $queryData, $entityMap->key];
     }
 
