@@ -43,4 +43,5 @@ class Annotation {
 
     const CRM_FETCHXMLPAGINGCOOKIE = '@Microsoft.Dynamics.CRM.fetchxmlpagingcookie';
 
+    const CRM_ASSOCIATEDNAVIGATIONPROPERTY = '@Microsoft.Dynamics.CRM.associatednavigationproperty';
 }

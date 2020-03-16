@@ -149,7 +149,9 @@ class SerializationHelper {
                 continue;
             }
 
-            if ( !array_key_exists( $field, $inboundMap ) ) {
+            $associatedNavigationProperty = $field . Annotation::CRM_ASSOCIATEDNAVIGATIONPROPERTY;
+
+            if ( !array_key_exists( $field, $inboundMap ) && !property_exists($rawEntity, $associatedNavigationProperty)) {
                 $this->client->getLogger()->warning( "Received {$targetEntity->LogicalName}[$field] from Web API which is absent in the inbound attribute map", [ 'inboundMap' => $inboundMap ] );
             }
 
@@ -160,7 +162,6 @@ class SerializationHelper {
             $targetField = array_key_exists( $field, $inboundMap )? $inboundMap[$field] : $field;
             $logicalNameField = $field . Annotation::CRM_LOOKUPLOGICALNAME;
             $formattedValueField = $field . Annotation::ODATA_FORMATTEDVALUE;
-            $expandedValueField = substr($field, 1, -6); // 6 = strlen('_value')
             $targetValue = $value;
 
             if ( $attributeToEntityMap !== null && strpos( $targetField, '_x002e_' ) !== false ) {
@@ -193,8 +194,8 @@ class SerializationHelper {
              */
             if ( property_exists( $rawEntity, $logicalNameField ) ) {
                 $targetValue = new EntityReference( $rawEntity->{$logicalNameField}, $value );
-                if (property_exists($rawEntity, $expandedValueField)) {
-                    $targetValue = $this->deserializeEntity($rawEntity->{$expandedValueField}, $targetValue);
+                if (property_exists($rawEntity, $associatedNavigationProperty) && property_exists($rawEntity, $rawEntity->{$associatedNavigationProperty})) {
+                    $targetValue = $this->deserializeEntity($rawEntity->{$rawEntity->{$associatedNavigationProperty}}, $targetValue);
                 }
             } elseif ( $attributeToEntityMap !== null
                        && preg_match( '~^[0-9a-f]{8}-([0-9a-f]{4}-){3}[0-9a-f]{12}$~', $value )
