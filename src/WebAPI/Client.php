@@ -479,7 +479,7 @@ class Client implements IOrganizationService {
         $queryData = [];
         $filterQuery = [];
         foreach ( $query->Attributes as $attributeName => $value ) {
-            $queryAttributeName = $columnMap[ $attributeName ];
+            $queryAttributeName = $columnMap[ $attributeName ] ?? $attributeName;
 
             $attributeType = '';
             if ( array_key_exists( $attributeName, $entityMap->fieldTypes ) ) {
@@ -487,35 +487,58 @@ class Client implements IOrganizationService {
             }
 
             $operator = 'eq';
+            $logicalOperator = 'and';
 
+            // Non-default operator
             if (is_array($value)) {
                 $operator = key($value);
                 $value = current($value);
             }
 
-            switch ( true ) {
-                /*
-                 * GUIDs may be stored as strings,
-                 * but GUIDs in UniqueIdentifier attributes must not be enclosed in quotes.
-                 */
-                case ( is_string( $value ) && $attributeType !== 'Edm.Guid' ):
-                    $queryValue = "'{$value}'";
-                    break;
-                case is_bool( $value ):
-                    $queryValue = $value? 'true' : 'false';
-                    break;
-                case $value === null:
-                    $queryValue = 'null';
-                    break;
-                default:
-                    $queryValue = $value;
+            // Non-default logical operator
+            if (is_array($value)) {
+                $logicalOperator = is_string(key($value)) ? key($value) : $logicalOperator;
+                $value = current($value);
             }
 
-            if (in_array($operator, ['contains', 'endswith', 'startswith'])) {
-                $filterQuery[] = sprintf("%s(%s, '%s')", $operator, $attributeName, $value);
-            } else {
-                $filterQuery[] = implode(' ', [$queryAttributeName, ($operator ?? 'eq'), $queryValue]);
+            $queryValue = (array) $value;
+
+            array_walk($queryValue, function (&$value) use ($attributeType) {
+                switch ( true ) {
+                    /*
+                     * GUIDs may be stored as strings,
+                     * but GUIDs in UniqueIdentifier attributes must not be enclosed in quotes.
+                     */
+                    case ( is_string( $value ) && $attributeType !== 'Edm.Guid' ):
+                        $value = "'{$value}'";
+                        break;
+                    case is_bool( $value ):
+                        $value = $value? 'true' : 'false';
+                        break;
+                    case $value === null:
+                        $value = 'null';
+                        break;
+                    default:
+                        break;
+                }
+            });
+
+            $callback = in_array($operator, ['contains', 'endswith', 'startswith'])
+            ?
+                function (string $filter) use ($operator, $queryAttributeName) {
+                    return sprintf("%s(%s, %s)", $operator, $queryAttributeName, $filter);
+                }
+            :
+                function (string $filter) use ($operator, $queryAttributeName) {
+                    return implode(' ', [$queryAttributeName, ($operator ?? 'eq'), $filter]);
+                }
+            ;
+
+            $filters = [];
+            foreach ($queryValue as $filter) {
+                $filters[] = $callback($filter);
             }
+            $filterQuery[] = sprintf('(%s)', join(" $logicalOperator ", $filters));
         }
         if ( count( $filterQuery ) ) {
             $queryData['Filter'] = implode( ' and ', $filterQuery );
