@@ -501,7 +501,7 @@ class Client implements IOrganizationService {
                 $value = current($value);
             }
 
-            $queryValue = (array) $value;
+            $queryValue = is_array($value) ? $value : [$value];
 
             array_walk($queryValue, function (&$value) use ($attributeType) {
                 switch ( true ) {
@@ -540,6 +540,7 @@ class Client implements IOrganizationService {
             }
             $filterQuery[] = sprintf('(%s)', join(" $logicalOperator ", $filters));
         }
+
         if ( count( $filterQuery ) ) {
             $queryData['Filter'] = implode( ' and ', $filterQuery );
         }
