@@ -150,12 +150,13 @@ class SerializationHelper {
             }
 
             $associatedNavigationProperty = $field . Annotation::CRM_ASSOCIATEDNAVIGATIONPROPERTY;
+            $hasAssociatedNavigationProperty = (property_exists($rawEntity, $associatedNavigationProperty) && property_exists($rawEntity, $rawEntity->{$associatedNavigationProperty}));
 
-            if ( !array_key_exists( $field, $inboundMap ) && !property_exists($rawEntity, $associatedNavigationProperty)) {
+            if ( !array_key_exists( $field, $inboundMap ) && !property_exists($rawEntity, $field)) {
                 $this->client->getLogger()->warning( "Received {$targetEntity->LogicalName}[$field] from Web API which is absent in the inbound attribute map", [ 'inboundMap' => $inboundMap ] );
             }
 
-            if ( $attributeToEntityMap === null && ( !array_key_exists( $field, $inboundMap ) || $value === null ) ) {
+            if ( $attributeToEntityMap === null && ((!array_key_exists( $field, $inboundMap ) && false === $hasAssociatedNavigationProperty) || $value === null ) ) {
                 continue;
             }
 
@@ -192,9 +193,9 @@ class SerializationHelper {
              * entity type targeted by the lookup attribute. We could validate logical name / ID pair in CRM
              * but it is a costly procedure, especially for lookups with a long Targets list.
              */
-            if ( property_exists( $rawEntity, $logicalNameField ) ) {
+            if ( property_exists( $rawEntity, $logicalNameField ) || true === $hasAssociatedNavigationProperty) {
                 $targetValue = new EntityReference( $rawEntity->{$logicalNameField}, $value );
-                if (property_exists($rawEntity, $associatedNavigationProperty) && property_exists($rawEntity, $rawEntity->{$associatedNavigationProperty})) {
+                if (true === $hasAssociatedNavigationProperty) {
                     $targetValue = $this->deserializeEntity($rawEntity->{$rawEntity->{$associatedNavigationProperty}}, $targetValue);
                 }
             } elseif ( $attributeToEntityMap !== null
