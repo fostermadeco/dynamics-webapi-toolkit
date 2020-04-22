@@ -156,7 +156,7 @@ class SerializationHelper {
                 $this->client->getLogger()->warning( "Received {$targetEntity->LogicalName}[$field] from Web API which is absent in the inbound attribute map", [ 'inboundMap' => $inboundMap ] );
             }
 
-            if ( $attributeToEntityMap === null && ((!array_key_exists( $field, $inboundMap ) && false === $hasAssociatedNavigationProperty) || $value === null ) ) {
+            if ( $attributeToEntityMap === null && ((!array_key_exists( $field, $inboundMap ) && false === $hasAssociatedNavigationProperty) || $value === null ) && !is_array($value)) {
                 continue;
             }
 
@@ -208,6 +208,12 @@ class SerializationHelper {
                 if ( array_key_exists( $targetField, $attributeToEntityMap ) ) {
                     $targetValue = new EntityReference( $attributeToEntityMap[$targetField], $value );
                 }
+            } elseif (is_array($targetValue)) {
+                $targetValue = array_column(array_map(function ($item) {
+                    unset($item->{'@odata.etag'});
+
+                    return array_values((array) $item);
+                }, $targetValue), 0);
             }
 
             $targetEntity->Attributes[$targetField] = $targetValue;
