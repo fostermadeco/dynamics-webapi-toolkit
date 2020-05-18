@@ -209,11 +209,11 @@ class SerializationHelper {
                     $targetValue = new EntityReference( $attributeToEntityMap[$targetField], $value );
                 }
             } elseif (is_array($targetValue)) {
-                $targetValue = array_column(array_map(function ($item) {
+                $targetValue = array_map(function ($item) {
                     unset($item->{'@odata.etag'});
 
-                    return array_values((array) $item);
-                }, $targetValue), 0);
+                    return (array) $item;
+                }, $targetValue);
             }
 
             $targetEntity->Attributes[$targetField] = $targetValue;
