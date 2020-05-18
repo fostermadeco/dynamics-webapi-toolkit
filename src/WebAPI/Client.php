@@ -523,16 +523,23 @@ class Client implements IOrganizationService {
                 }
             });
 
-            $callback = in_array($operator, ['contains', 'endswith', 'startswith'])
-            ?
-                function (string $filter) use ($operator, $queryAttributeName) {
-                    return sprintf("%s(%s, %s)", $operator, $queryAttributeName, $filter);
-                }
-            :
-                function (string $filter) use ($operator, $queryAttributeName) {
-                    return implode(' ', [$queryAttributeName, ($operator ?? 'eq'), $filter]);
-                }
-            ;
+            $callback = function (string $filter) use ($operator, $queryAttributeName) {
+                return implode(' ', [$queryAttributeName, ($operator ?? 'eq'), $filter]);
+            };
+
+            switch (true) {
+                case in_array($operator, ['contains', 'endswith', 'startswith']):
+                    $callback = function (string $filter) use ($operator, $queryAttributeName) {
+                        return sprintf("%s(%s, %s)", $operator, $queryAttributeName, $filter);
+                    };
+                    break;
+
+                case in_array($operator, ['any', 'all']):
+                    $callback = function (string $filter) use ($operator, $queryAttributeName, $logicalOperator, $value) {
+                        return sprintf("%s/%s(o:o/%s eq %s)", $queryAttributeName, $operator, $logicalOperator, $value);
+                    };
+                    break;
+            }
 
             $filters = [];
             foreach ($queryValue as $filter) {
@@ -597,10 +604,15 @@ class Client implements IOrganizationService {
             } else {
                 $expanded = [];
                 foreach ($query->Expand as $related => $fields) {
+                    if ($filter = $fields['$filter'] ?? null) {
+                        unset($fields['$filter']);
+                        $filter = sprintf('%s %s %s', key($filter), key(current($filter)), current(current($filter)));
+                    }
+
                     if (is_int($related)) {
                         $expanded[] = $fields;
                     } else {
-                        $expanded[] = sprintf('%s($select=%s)', $related, join(',', $fields));
+                        $expanded[] = sprintf('%s($select=%s%s%s)', $related, join(',', $fields), $filter ? ';$filter=' : '', $filter);
                     }
                 }
                 $queryData['Expand'] = join(',', $expanded);
