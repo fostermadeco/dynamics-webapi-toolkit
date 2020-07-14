@@ -606,7 +606,12 @@ class Client implements IOrganizationService {
                 foreach ($query->Expand as $related => $fields) {
                     if ($filter = $fields['$filter'] ?? null) {
                         unset($fields['$filter']);
-                        $filter = sprintf('%s %s %s', key($filter), key(current($filter)), current(current($filter)));
+
+                        array_walk($filter, function (&$v, $k) {
+                            $v = sprintf('%s %s %s', $k, key($v), current($v));
+                        });
+
+                        $filter = join(' and ', $filter);
                     }
 
                     if (is_int($related)) {
