@@ -510,7 +510,7 @@ class Client implements IOrganizationService {
                      * but GUIDs in UniqueIdentifier attributes must not be enclosed in quotes.
                      */
                     case ( is_string( $value ) && $attributeType !== 'Edm.Guid' ):
-                        $value = "'{$value}'";
+                        $value = sprintf("'%s'", str_replace("'", "''", $value));
                         break;
                     case is_bool( $value ):
                         $value = $value? 'true' : 'false';

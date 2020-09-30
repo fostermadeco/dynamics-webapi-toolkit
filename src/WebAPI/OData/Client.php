@@ -238,7 +238,7 @@ class Client {
                 $queryParameters['$orderby'] = implode( ',', $queryOptions['OrderBy'] );
             }
             if ( isset( $queryOptions['Filter'] ) ) {
-                $queryParameters['$filter'] = str_replace("'", "''", $queryOptions['Filter']);
+                $queryParameters['$filter'] = $queryOptions['Filter'];
             }
             if ( isset( $queryOptions['Expand'] ) ) {
                 $queryParameters['$expand'] = $queryOptions['Expand'];
