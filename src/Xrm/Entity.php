@@ -202,7 +202,7 @@ class Entity implements \ArrayAccess {
      *
      * @return boolean true on success or false on failure.
      */
-    public function offsetExists( $offset ) {
+    public function offsetExists( $offset ): bool {
         return $this->Contains( $offset );
     }
 
@@ -213,7 +213,7 @@ class Entity implements \ArrayAccess {
      *
      * @return mixed Can return all value types.
      */
-    public function offsetGet( $offset ) {
+    public function offsetGet( $offset ): mixed {
         return $this->GetAttributeValue( $offset );
     }
 
@@ -225,7 +225,7 @@ class Entity implements \ArrayAccess {
      *
      * @return void
      */
-    public function offsetSet( $offset, $value ) {
+    public function offsetSet( $offset, $value ): void {
         $this->SetAttributeValue( $offset, $value );
     }
 
@@ -236,7 +236,7 @@ class Entity implements \ArrayAccess {
      *
      * @return void
      */
-    public function offsetUnset($offset) {
+    public function offsetUnset($offset): void {
         unset( $this->Attributes[$offset] );
         unset( $this->attributeState[$offset] );
     }
