@@ -72,6 +72,10 @@ class SerializationHelper {
         $translatedData = [];
 
         foreach ( $touchedFields as $field => $value ) {
+            if (!isset($outboundMap[$field])) {
+                continue;
+            }
+            
             $outboundMapping = $outboundMap[$field];
             $isLookup = is_array( $outboundMapping );
 
