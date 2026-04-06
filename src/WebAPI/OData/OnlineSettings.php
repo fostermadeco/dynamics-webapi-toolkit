@@ -41,6 +41,20 @@ class OnlineSettings extends Settings {
     public $applicationSecret;
 
     /**
+     * Path to PKCS#12 (.pfx/.p12) certificate file.
+     *
+     * @var string
+     */
+    public $certificatePath = '';
+
+    /**
+     * Certificate passphrase.
+     *
+     * @var string|null
+     */
+    public $passphrase = null;
+
+    /**
      * Azure AD tenant ID.
      *
      * Optional, allows skipping tenant detection.
@@ -56,6 +70,14 @@ class OnlineSettings extends Settings {
      */
     public function getEndpointURI() {
         return trim( $this->instanceURI, '/' ) . '/api/data/v' . $this->apiVersion . '/';
+    }
+
+	/**
+	 * Check if authentication is certificate based or not
+	 * @return bool
+	 */
+    public function isCertificateBasedAuth(): bool {
+        return empty($this->applicationSecret) && !empty($this->certificatePath);
     }
 
 }
